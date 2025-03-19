@@ -642,23 +642,111 @@ class MarchMadnessPredictor:
         for i, (team, prob) in enumerate(list(results['final_four_probabilities'].items())[:8]):
             print(f"  {i+1}. {team}: {prob:.2%}")
     
-    def visualize_bracket(self, results):
-        """
-        Create visualizations of the bracket and predictions
-        """
-        # Create a figure with champion probabilities
-        plt.figure(figsize=(12, 8))
+def visualize_bracket(self, results=None):
+    """
+    Create visualizations of the bracket and predictions
+    
+    Parameters:
+    results: Dictionary containing simulation results. If None, will run a new simulation.
+    """
+    # Check if results are provided, if not, run a simulation
+    if results is None:
+        # Create a sample bracket for simulation
+        sample_bracket = {
+            'East': [f"Team_{i}" for i in range(1, 17)],
+            'West': [f"Team_{i+16}" for i in range(1, 17)],
+            'Midwest': [f"Team_{i+32}" for i in range(1, 17)],
+            'South': [f"Team_{i+48}" for i in range(1, 17)]
+        }
         
-        # Plot top 10 champion probabilities
-        top_champions = list(results['champion_probabilities'].items())[:10]
-        teams = [team for team, _ in top_champions]
-        probs = [prob for _, prob in top_champions]
-        
-        plt.barh(teams, probs, color='skyblue')
-        plt.xlabel('Probability')
-        plt.ylabel('Team')
-        plt.title('Championship Probabilities')
-        plt.grid(axis='x', linestyle='--', alpha=0.7)
-        
-        for i, prob in enumerate(probs):
-            plt.text(prob + 0.01, i, f'{prob:.1%}')
+        print("No results provided. Running tournament simulation...")
+        results = self.simulate_tournament(sample_bracket, num_simulations=50)
+    
+    # Validate that results dictionary has the expected structure
+    required_keys = ['bracket', 'champion_probabilities', 'final_four_probabilities']
+    if not all(key in results for key in required_keys):
+        raise ValueError("Results dictionary is missing required keys. Expected keys: " + 
+                        ", ".join(required_keys))
+    
+    # Validate bracket structure
+    bracket_rounds = ['first_round', 'second_round', 'sweet_16', 'elite_8', 'final_4', 'championship']
+    if not all(round_name in results['bracket'] for round_name in bracket_rounds):
+        raise ValueError("Bracket results are missing one or more tournament rounds")
+    
+    # Now create visualizations
+    # Create a figure with champion probabilities
+    plt.figure(figsize=(12, 8))
+    
+    # Plot top 10 champion probabilities
+    top_champions = list(results['champion_probabilities'].items())[:10]
+    teams = [team for team, _ in top_champions]
+    probs = [prob for _, prob in top_champions]
+    
+    plt.barh(teams, probs, color='skyblue')
+    plt.xlabel('Probability')
+    plt.ylabel('Team')
+    plt.title('Championship Probabilities')
+    plt.grid(axis='x', linestyle='--', alpha=0.7)
+    
+    for i, prob in enumerate(probs):
+        plt.text(prob + 0.01, i, f'{prob:.1%}')
+    
+    plt.tight_layout()
+    plt.savefig('championship_probabilities.png')
+    plt.close()
+    
+    # Create a figure with Final Four probabilities
+    plt.figure(figsize=(12, 10))
+    
+    # Plot top 16 Final Four probabilities
+    top_final_four = list(results['final_four_probabilities'].items())[:16]
+    ff_teams = [team for team, _ in top_final_four]
+    ff_probs = [prob for _, prob in top_final_four]
+    
+    plt.barh(ff_teams, ff_probs, color='lightgreen')
+    plt.xlabel('Probability')
+    plt.ylabel('Team')
+    plt.title('Final Four Probabilities')
+    plt.grid(axis='x', linestyle='--', alpha=0.7)
+    
+    for i, prob in enumerate(ff_probs):
+        plt.text(prob + 0.01, i, f'{prob:.1%}')
+    
+    plt.tight_layout()
+    plt.savefig('final_four_probabilities.png')
+    plt.close()
+    
+    # Create a heatmap of upsets in the bracket
+    plt.figure(figsize=(14, 8))
+    
+    # Extract upset data from each round
+    rounds = ['first_round', 'second_round', 'sweet_16', 'elite_8']
+    regions = list(results['bracket']['elite_8'].keys())
+    
+    # Create upset matrix
+    upset_matrix = np.zeros((len(regions), len(rounds)))
+    
+    for i, region in enumerate(regions):
+        for j, round_name in enumerate(rounds):
+            if round_name == 'elite_8':
+                upset_matrix[i, j] = 1 if results['bracket'][round_name][region]['upset'] else 0
+            else:
+                # Count upsets in this region for this round
+                round_results = results['bracket'][round_name][region]
+                upset_count = sum(1 for match in round_results if match['upset'])
+                total_matches = len(round_results)
+                upset_matrix[i, j] = upset_count / total_matches
+    
+    # Plot heatmap
+    sns.heatmap(upset_matrix, annot=True, cmap='YlOrRd', 
+                xticklabels=['First Round', 'Second Round', 'Sweet 16', 'Elite 8'],
+                yticklabels=regions, fmt='.2f')
+    plt.title('Upset Probability by Region and Round')
+    plt.tight_layout()
+    plt.savefig('upset_heatmap.png')
+    plt.close()
+    
+    # Visualize the bracket structure
+    self._visualize_bracket_structure(results)
+    
+    print("Visualizations saved to disk.")
